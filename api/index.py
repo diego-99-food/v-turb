@@ -659,6 +659,15 @@ _TG_BRANDS_PADRAO = OrderedDict([
     ("TG - B 4 : Insight7 - DIA", [
         "TG DIEGO🚀 B8 TG MGT - DIA - V9S32 - VSL 9 (Semana 32) - Apex Sugar Shield - Pitch 57_24.mp4",
         "GOAT - [B4TG] - V5S23 - VSL 5 (Semana 23) - Apex Sugar Shield - Pitch 57:19.mp4",
+        "TG DIEGO🚀 Tells - v10s30 - Apex Sugar Shield - Pitch 01_00_14",
+        "[B4TG] - [TOP1 DIA] - S ✅DIA - V17S4 (Semana 4) - Apex Sugar Shield - Pitch 38_22 (1) (1).mp4",
+        "[B4TG] - [TOP2 DIA] - ✅V20S4 (Semana 4) - APEX SUGAR SHIELD Pitch 51_50 (1).mp4",
+        "[B4TG] - [TOP3 DIA] - V19S4 - Apex Sugar Shield - Pitch 48:35.mp4",
+        "[B4TG] - [TOP4 DIA] - V6S16 - Apex Sugar Shield - Pitch 41:29.mp4",
+        "[B4TG] - [TOP5 DIA] - V1S11 - VSL 1 (Semana 11) - Apex Sugar Shield - Pitch 29_28.mp4",
+        "⚽BRAND4 - V10S26 - VSL 10 (Semana 26) - Apex Sugar Shield - Pitch 48:10.mp4",
+        "BRAND 4 TG - V2S11 - Apex Sugar Shield - Pitch 19:39.mp4",
+        "Cópia de V3S23 - VSL 3 (Semana 23) - Apex Sugar Shield - Pith 56:09.mp4",
     ]),
     ("TG - B 5 : Agencia Giga - NERVE", [
         "TG DIEGO🚀 ⚽BRAND5 - V8S23 - VSL 8 (Semana 23) - Apex Gold - Pitch 43:10.mp4",
