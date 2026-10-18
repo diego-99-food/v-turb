@@ -2015,7 +2015,7 @@ _VIEWS = """
       <div>
         <h2 id="tgVslTitle">VSLs do brand</h2>
         <p>Como o tráfego do brand se divide entre as VSLs e quanto cada uma devolve em faturamento.
-           "Configurado" é a divisão do teste na vTurb, digitada aqui; "Real" é medida pelas visitas.</p>
+           "Configurado" é a divisão do teste na vTurb, digitada aqui.</p>
       </div>
     </div>
     <div id="tgVslSummary"></div>
@@ -2024,7 +2024,6 @@ _VIEWS = """
         <thead><tr>
           <th>VSL</th>
           <th class="r" title="Divisão configurada no teste A/B da vTurb. Digite e salve: fica guardada para todo o time">Configurado</th>
-          <th title="Parte das visitas únicas do brand que foi para esta VSL no período">Real no período</th>
           <th class="r" id="tgVslUltimo" title="Parte das visitas do brand no último dia completo: é o mais perto da divisão configurada hoje">Último dia</th>
           <th class="r">Visitas únicas</th>
           <th class="r">Vendas</th>
@@ -5307,9 +5306,8 @@ function renderTgVsls() {
   $('#tgVslSummary').innerHTML = lider && lider.v.totals.unique_views
     ? '<div class="note sev-info" style="margin-bottom:12px"><p style="font-size:13.5px;color:var(--ink-1)">' +
         '<b>' + esc(lider.v.name) + '</b>' +
-        (lider.conf !== undefined ? ' está configurada com <b>' + fPct(lider.conf, 0) + '</b>,' : '') +
-        ' recebeu <b style="color:var(--cyan)">' + fPct(lider.trafego, 1) +
-        '</b> do tráfego do brand e trouxe <b style="color:var(--brand-2)">' + fMoney(lider.v.totals.revenue) +
+        (lider.conf !== undefined ? ' está configurada com <b>' + fPct(lider.conf, 0) + '</b> e' : '') +
+        ' trouxe <b style="color:var(--brand-2)">' + fMoney(lider.v.totals.revenue) +
         '</b>, que é ' + fPct(lider.fatia, 1) + ' do faturamento do brand.</p></div>'
     : '';
 
@@ -5321,7 +5319,6 @@ function renderTgVsls() {
       '<td class="r"><input class="tg-pct" type="number" min="0" max="100" step="1" inputmode="decimal" placeholder="—"' +
         ' data-pid="' + esc(l.v.id) + '" value="' + (l.conf !== undefined ? l.conf : '') + '"' +
         (ativa ? '' : ' disabled') + ' aria-label="Porcentagem configurada"></td>' +
-      '<td class="tg-fatia"><b class="num" style="color:var(--cyan)">' + fPct(l.trafego, 1) + '</b>' + barra(l.trafego, 'var(--cyan)') + '</td>' +
       '<td class="r">' + fPct(l.trafegoDia, 1) + '</td>' +
       '<td class="r">' + fInt(l.v.totals.unique_views) + '</td>' +
       '<td class="r">' + fInt(l.v.totals.conversions) + '</td>' +
@@ -5330,7 +5327,7 @@ function renderTgVsls() {
       '<td class="r">' + fMoney(l.rpv) + '</td></tr>';
   }).join('') +
   '<tr class="tg-total"><td>Total do brand</td><td class="r"><span class="num" id="tgSomaCel">—</span></td>' +
-    '<td class="tg-fatia"><b class="num">100%</b></td><td class="r">100%</td>' +
+    '<td class="r">100%</td>' +
     '<td class="r">' + fInt(visitas) + '</td><td class="r">' + fInt(b.totals.conversions) + '</td>' +
     '<td class="tg-fatia"><b class="num">' + fMoney(fat) + '</b></td><td class="r">' + fMoney(tgMetricas(b.totals).rpv) + '</td></tr>';
 
