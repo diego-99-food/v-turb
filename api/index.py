@@ -802,6 +802,107 @@ def _totais(linhas):
     return tot
 
 
+# ----------------------------------------------------------
+# Divisão de tráfego configurada nos testes A/B da vTurb.
+# A API de Analytics não expõe esse número, então o time digita no painel e
+# ele fica guardado num Redis da Upstash (integração da Vercel, que cadastra
+# KV_REST_API_URL/KV_REST_API_TOKEN ou UPSTASH_REDIS_REST_URL/_TOKEN).
+# Chave por brand + player: a mesma VSL pode ter pesos diferentes em brands
+# diferentes (ex.: B4 e B8).
+# ----------------------------------------------------------
+
+REDIS_URL = (os.environ.get("KV_REST_API_URL") or os.environ.get("UPSTASH_REDIS_REST_URL") or "").rstrip("/")
+REDIS_TOKEN = os.environ.get("KV_REST_API_TOKEN") or os.environ.get("UPSTASH_REDIS_REST_TOKEN") or ""
+_CHAVE_DIVISAO = "tg:divisao"
+_CHAVE_DIVISAO_META = "tg:divisao:meta"
+
+
+class ErroArmazenamento(Exception):
+    """Falha ao ler ou gravar a divisão configurada."""
+
+
+def _redis(*comando):
+    if not (REDIS_URL and REDIS_TOKEN):
+        raise ErroArmazenamento("O banco de configurações não está conectado ao projeto.")
+    try:
+        res = HTTP.post(REDIS_URL, headers={"Authorization": f"Bearer {REDIS_TOKEN}"},
+                        json=list(comando), timeout=8)
+    except Exception as exc:
+        raise ErroArmazenamento(f"Não foi possível falar com o banco ({type(exc).__name__}).")
+    if res.status_code != 200:
+        raise ErroArmazenamento(f"O banco respondeu {res.status_code}.")
+    dados = res.json()
+    if "error" in dados:
+        raise ErroArmazenamento(f"O banco recusou o comando: {dados['error']}")
+    return dados.get("result")
+
+
+def _hash_para_dict(lista):
+    lista = lista or []
+    return {lista[i]: lista[i + 1] for i in range(0, len(lista) - 1, 2)}
+
+
+def ler_divisao():
+    """{brand: {"pesos": {player_id: pct}, "meta": {...}}}. Vazio se o banco
+    não estiver conectado: o painel continua funcionando sem a coluna."""
+    if not (REDIS_URL and REDIS_TOKEN):
+        return {}, False
+    try:
+        pesos = _hash_para_dict(_redis("HGETALL", _CHAVE_DIVISAO))
+        metas = _hash_para_dict(_redis("HGETALL", _CHAVE_DIVISAO_META))
+    except ErroArmazenamento as exc:
+        log.warning("divisão: %s", exc)
+        return {}, False
+    saida = defaultdict(lambda: {"pesos": {}, "meta": None})
+    for campo, valor in pesos.items():
+        brand, _, pid = campo.rpartition("|")
+        try:
+            saida[brand]["pesos"][pid] = float(valor)
+        except ValueError:
+            continue
+    for brand, meta in metas.items():
+        try:
+            saida[brand]["meta"] = json.loads(meta)
+        except ValueError:
+            pass
+    return dict(saida), True
+
+
+def salvar_divisao(brand, pesos, usuario):
+    """Substitui a divisão configurada de um brand. pesos: {player_id: pct}."""
+    if brand not in TG_BRANDS:
+        raise ValueError("Brand desconhecido.")
+    limpos = {}
+    for pid, pct in (pesos or {}).items():
+        pid = str(pid)[:64]
+        if pct is None or pct == "":
+            continue
+        try:
+            valor = float(pct)
+        except (TypeError, ValueError):
+            raise ValueError("Use só números entre 0 e 100.")
+        if not 0 <= valor <= 100:
+            raise ValueError("Cada porcentagem precisa estar entre 0 e 100.")
+        limpos[pid] = round(valor, 2)
+    if len(limpos) > 60:
+        raise ValueError("VSLs demais num brand só.")
+
+    # Apaga o que havia do brand antes de gravar: campo vazio = sem valor.
+    atuais = _hash_para_dict(_redis("HGETALL", _CHAVE_DIVISAO))
+    velhos = [c for c in atuais if c.rpartition("|")[0] == brand]
+    if velhos:
+        _redis("HDEL", _CHAVE_DIVISAO, *velhos)
+    if limpos:
+        pares = []
+        for pid, valor in limpos.items():
+            pares += [f"{brand}|{pid}", str(valor)]
+        _redis("HSET", _CHAVE_DIVISAO, *pares)
+    agora_brt = datetime.utcnow() - timedelta(hours=3)
+    meta = {"em": agora_brt.strftime("%Y-%m-%d %H:%M"), "por": usuario}
+    _redis("HSET", _CHAVE_DIVISAO_META, brand, json.dumps(meta, ensure_ascii=False))
+    return {"pesos": limpos, "meta": meta}
+
+
 def carregar_tg(inicio, fim):
     """Tráfego e faturamento diários de todos os brands do TG somados, mais o
     mesmo recorte do período imediatamente anterior (mesma duração) para dar
@@ -1268,6 +1369,12 @@ table.grid.tg-grid td.tg-fatia { min-width: 128px; white-space: nowrap; font-siz
 table.grid.tg-grid td.tg-fatia .share { opacity: .7; }
 table.grid.tg-grid tbody tr.tg-vazia td { opacity: .45; }
 table.grid.tg-grid .cell-title { max-width: 360px; }
+.tg-pct { width: 64px; padding: 5px 7px; border-radius: var(--r-xs); border: 1px solid var(--line-2);
+  background: var(--panel-2); color: var(--ink-1); font-family: var(--mono); font-size: 13px; text-align: right; }
+.tg-pct:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-wash); }
+.tg-pct:disabled { opacity: .5; }
+.tg-savebar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 12px; font-size: 13px; color: var(--ink-3); }
+.tg-savebar .tg-soma { font-family: var(--mono); font-weight: 600; }
 .tg-bar { display: block; height: 5px; border-radius: 3px; background: var(--panel-3); margin-top: 7px; overflow: hidden; }
 .tg-bar > span { display: block; height: 100%; border-radius: 3px; min-width: 2px; }
 table.grid.tg-grid tbody tr.tg-total td { background: var(--panel-2); font-weight: 600; cursor: default; }
@@ -1908,7 +2015,7 @@ _VIEWS = """
       <div>
         <h2 id="tgVslTitle">VSLs do brand</h2>
         <p>Como o tráfego do brand se divide entre as VSLs e quanto cada uma devolve em faturamento.
-           A divisão é a real, medida pelas visitas: a vTurb não expõe a porcentagem configurada no teste.</p>
+           "Configurado" é a divisão do teste na vTurb, digitada aqui; "Real" é medida pelas visitas.</p>
       </div>
     </div>
     <div id="tgVslSummary"></div>
@@ -1916,7 +2023,8 @@ _VIEWS = """
       <table class="grid tg-grid">
         <thead><tr>
           <th>VSL</th>
-          <th title="Parte das visitas únicas do brand que foi para esta VSL no período">Tráfego no período</th>
+          <th class="r" title="Divisão configurada no teste A/B da vTurb. Digite e salve: fica guardada para todo o time">Configurado</th>
+          <th title="Parte das visitas únicas do brand que foi para esta VSL no período">Real no período</th>
           <th class="r" id="tgVslUltimo" title="Parte das visitas do brand no último dia completo: é o mais perto da divisão configurada hoje">Último dia</th>
           <th class="r">Visitas únicas</th>
           <th class="r">Vendas</th>
@@ -1926,6 +2034,7 @@ _VIEWS = """
         <tbody id="tgVsls"></tbody>
       </table>
     </div></div>
+    <div class="tg-savebar" id="tgSaveBar"></div>
   </div>
 
   <div class="block">
@@ -5189,10 +5298,17 @@ function renderTgVsls() {
     rpv: tgMetricas(v.totals).rpv
   })).sort((x, y) => y.trafego - x.trafego || y.fatia - x.fatia);
 
+  const div = (T.divisao || {})[b.name] || { pesos: {}, meta: null };
+  const ativa = !!T.divisao_ativa;
+  linhas.forEach(l => { l.conf = div.pesos[l.v.id]; });
+  if (linhas.some(l => l.conf !== undefined)) linhas.sort((x, y) => (y.conf || 0) - (x.conf || 0) || y.trafego - x.trafego);
+
   const lider = linhas[0];
   $('#tgVslSummary').innerHTML = lider && lider.v.totals.unique_views
     ? '<div class="note sev-info" style="margin-bottom:12px"><p style="font-size:13.5px;color:var(--ink-1)">' +
-        '<b>' + esc(lider.v.name) + '</b> recebeu <b style="color:var(--cyan)">' + fPct(lider.trafego, 1) +
+        '<b>' + esc(lider.v.name) + '</b>' +
+        (lider.conf !== undefined ? ' está configurada com <b>' + fPct(lider.conf, 0) + '</b>,' : '') +
+        ' recebeu <b style="color:var(--cyan)">' + fPct(lider.trafego, 1) +
         '</b> do tráfego do brand e trouxe <b style="color:var(--brand-2)">' + fMoney(lider.v.totals.revenue) +
         '</b>, que é ' + fPct(lider.fatia, 1) + ' do faturamento do brand.</p></div>'
     : '';
@@ -5202,6 +5318,9 @@ function renderTgVsls() {
     const vazio = !l.v.totals.unique_views;
     return '<tr' + (vazio ? ' class="tg-vazia"' : '') + ' title="' + esc(l.v.name) + '">' +
       '<td><span class="cell-title">' + esc(l.v.name) + '</span></td>' +
+      '<td class="r"><input class="tg-pct" type="number" min="0" max="100" step="1" inputmode="decimal" placeholder="—"' +
+        ' data-pid="' + esc(l.v.id) + '" value="' + (l.conf !== undefined ? l.conf : '') + '"' +
+        (ativa ? '' : ' disabled') + ' aria-label="Porcentagem configurada"></td>' +
       '<td class="tg-fatia"><b class="num" style="color:var(--cyan)">' + fPct(l.trafego, 1) + '</b>' + barra(l.trafego, 'var(--cyan)') + '</td>' +
       '<td class="r">' + fPct(l.trafegoDia, 1) + '</td>' +
       '<td class="r">' + fInt(l.v.totals.unique_views) + '</td>' +
@@ -5210,9 +5329,54 @@ function renderTgVsls() {
         ' <span style="color:var(--ink-3)">' + fPct(l.fatia, 1) + '</span>' + barra(l.fatia, 'var(--brand-2)') + '</td>' +
       '<td class="r">' + fMoney(l.rpv) + '</td></tr>';
   }).join('') +
-  '<tr class="tg-total"><td>Total do brand</td><td class="tg-fatia"><b class="num">100%</b></td><td class="r">100%</td>' +
+  '<tr class="tg-total"><td>Total do brand</td><td class="r"><span class="num" id="tgSomaCel">—</span></td>' +
+    '<td class="tg-fatia"><b class="num">100%</b></td><td class="r">100%</td>' +
     '<td class="r">' + fInt(visitas) + '</td><td class="r">' + fInt(b.totals.conversions) + '</td>' +
     '<td class="tg-fatia"><b class="num">' + fMoney(fat) + '</b></td><td class="r">' + fMoney(tgMetricas(b.totals).rpv) + '</td></tr>';
+
+  $('#tgSaveBar').innerHTML = ativa
+    ? '<button class="btn btn-primary btn-sm" data-act="save-divisao">Salvar divisão</button>' +
+      '<span>Soma: <span class="tg-soma" id="tgSoma"></span></span>' +
+      '<span>' + (div.meta ? 'Atualizado em ' + brDate(div.meta.em.slice(0, 10)) + ' ' + esc(div.meta.em.slice(11)) +
+        (div.meta.por ? ' por ' + esc(div.meta.por) : '') : 'Ainda não preenchido para este brand.') + '</span>'
+    : '<span>Para digitar a divisão configurada, conecte o banco de configurações (Upstash) ao projeto na Vercel.</span>';
+  tgAtualizarSoma();
+}
+
+function tgAtualizarSoma() {
+  const campos = $$('#tgVsls .tg-pct');
+  const preenchidos = campos.filter(c => c.value !== '');
+  const soma = preenchidos.reduce((t, c) => t + (Number(c.value) || 0), 0);
+  const texto = preenchidos.length ? fPct(soma, 0) : '—';
+  const cor = !preenchidos.length ? 'var(--ink-3)' : (Math.abs(soma - 100) < 0.5 ? 'var(--pos)' : 'var(--warn)');
+  [$('#tgSoma'), $('#tgSomaCel')].forEach(el => { if (el) { el.textContent = texto; el.style.color = cor; } });
+}
+
+async function salvarDivisao() {
+  const brand = S.tgBrand;
+  if (!brand || !S.tg) return;
+  const pesos = {};
+  $$('#tgVsls .tg-pct').forEach(c => { if (c.value !== '') pesos[c.dataset.pid] = Number(c.value); });
+  const botao = $('[data-act="save-divisao"]');
+  if (botao) botao.disabled = true;
+  try {
+    const res = await fetch('/api/tg/divisao?route=tg-divisao', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ brand, pesos })
+    });
+    if (res.status === 401) { location.href = '/'; return; }
+    const salvo = await lerJson(res, '/api/tg/divisao');
+    S.tg.divisao = S.tg.divisao || {};
+    S.tg.divisao[brand] = salvo;
+    renderTgVsls();
+    toast('Divisão salva.');
+  } catch (err) {
+    console.error(err);
+    toast(err.message || 'Não deu para salvar.', 'err');
+  } finally {
+    if (botao) botao.disabled = false;
+  }
 }
 
 function exportTgCsv() {
@@ -5258,6 +5422,7 @@ function wire() {
 
   $('#search').addEventListener('input', debounce(filterCohorts, 160));
   $('#tgBrand').addEventListener('change', ev => { S.tgBrand = ev.target.value; renderTg(); });
+  $('#tgVsls').addEventListener('input', ev => { if (ev.target.classList.contains('tg-pct')) tgAtualizarSoma(); });
 
   document.addEventListener('click', ev => {
     const acao = ev.target.closest('[data-act]');
@@ -5266,6 +5431,7 @@ function wire() {
       if (a === 'export-csv') exportCsv();
       if (a === 'close-sheet') closeSheet();
       if (a === 'export-tg') exportTgCsv();
+      if (a === 'save-divisao') salvarDivisao();
       if (a === 'theme') toggleTheme();
       if (a === 'palette') openPalette();
       if (a === 'rail') document.body.classList.toggle('rail-open');
@@ -5558,6 +5724,52 @@ class handler(BaseHTTPRequestHandler):
 
     # ---------- rotas ----------
 
+    def do_POST(self):
+        """Só a gravação da divisão de tráfego configurada usa POST."""
+        rota = urlparse(self.path).path.rstrip("/").lower()
+        params = parse_qs(urlparse(self.path).query)
+        if not (rota.endswith("/api/tg/divisao") or params.get("route", [""])[0] == "tg-divisao"):
+            return self._json(404, {"error": "Rota não encontrada."})
+        try:
+            return self._api_tg_divisao()
+        except BrokenPipeError:
+            return
+        except Exception as exc:
+            log.exception("erro ao salvar a divisão")
+            return self._json(500, {"error": f"Erro interno ({type(exc).__name__})."})
+
+    def _api_tg_divisao(self):
+        sessao = self._sessao_ou_401()
+        if not sessao:
+            return
+        # Defesa contra CSRF além do SameSite=Lax: a origem tem que ser o
+        # próprio painel e o corpo tem que ser JSON.
+        host = self.headers.get("Host", "")
+        origem = self.headers.get("Origin", "")
+        if origem and urlparse(origem).netloc != host:
+            return self._json(403, {"error": "Origem não permitida."})
+        if "application/json" not in (self.headers.get("Content-Type", "") or ""):
+            return self._json(415, {"error": "Envie JSON."})
+        tamanho = int(self.headers.get("Content-Length", 0) or 0)
+        if tamanho > 20000:
+            return self._json(413, {"error": "Requisição grande demais."})
+        try:
+            corpo = json.loads(self.rfile.read(tamanho).decode("utf-8") or "{}")
+        except ValueError:
+            return self._json(400, {"error": "JSON inválido."})
+
+        try:
+            salvo = salvar_divisao(
+                str(corpo.get("brand", ""))[:200],
+                corpo.get("pesos") if isinstance(corpo.get("pesos"), dict) else {},
+                sessao.get("name") or sessao.get("email") or "",
+            )
+        except ValueError as exc:
+            return self._json(400, {"error": str(exc)})
+        except ErroArmazenamento as exc:
+            return self._json(503, {"error": str(exc)})
+        self._json(200, salvo, [montar_cookie(COOKIE_NAME, renovar_sessao(sessao), host)])
+
     def do_GET(self):
         alvo = urlparse(self.path)
         rota = alvo.path.rstrip("/").lower() or "/"
@@ -5758,6 +5970,7 @@ class handler(BaseHTTPRequestHandler):
         except ErroVTurb as exc:
             return self._json(502, {"error": str(exc)})
 
+        dados["divisao"], dados["divisao_ativa"] = ler_divisao()
         dados.update({"start": inicio, "end": fim, "elapsed_ms": int((time.time() - comeco) * 1000)})
         self._json(200, dados, [montar_cookie(COOKIE_NAME, renovar_sessao(sessao), host)])
 
