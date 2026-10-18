@@ -2114,7 +2114,7 @@ _VIEWS = """
       <div>
         <h2 id="tgVslTitle">VSLs do brand</h2>
         <p>Como o tráfego do brand se divide entre as VSLs e quanto cada uma devolve em faturamento.
-           "Configurado" é a divisão do teste na vTurb, digitada aqui.</p>
+           "Tráfego" é a divisão do teste na vTurb, digitada aqui.</p>
       </div>
     </div>
     <div id="tgVslSummary"></div>
@@ -2122,7 +2122,7 @@ _VIEWS = """
       <table class="grid tg-grid">
         <thead><tr>
           <th>VSL</th>
-          <th class="r" title="Divisão configurada no teste A/B da vTurb. Digite e salve: fica guardada para todo o time">Configurado</th>
+          <th class="r" title="Divisão configurada no teste A/B da vTurb. Digite e salve: fica guardada para todo o time">Tráfego</th>
           <th class="r" id="tgVslUltimo" title="Parte das visitas do brand no último dia completo: é o mais perto da divisão configurada hoje">Último dia</th>
           <th class="r">Visitas únicas</th>
           <th class="r">Vendas</th>
