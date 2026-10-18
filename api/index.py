@@ -1016,7 +1016,10 @@ _CSS = r"""
 }
 
 .rail-mark { display: flex; align-items: center; gap: 10px; padding: 0 8px; }
-.rail-mark img { max-width: 132px; max-height: 34px; height: auto; }
+.rail-mark img { max-width: 132px; max-height: 40px; height: auto; }
+/* A logo é branca com fundo transparente: no tema claro ela é invertida para
+   escurecer as letras, e o hue-rotate devolve o dourado do traço. */
+[data-theme="light"] .rail-mark img, [data-theme="light"] .gate-mark img { filter: invert(1) hue-rotate(180deg); }
 .rail-mark .fallback {
   font-weight: 700; font-size: 15px; letter-spacing: -.02em;
 }
@@ -1699,7 +1702,7 @@ def pagina_login(origem, aviso=""):
     nota = f'<p style="margin-top:14px;color:var(--brand-2)">{aviso}</p>' if aviso else ""
     corpo = f"""
 <main class="gate">
-  <div class="gate-mark"><img src="/logo.png" alt=""></div>
+  <div class="gate-mark"><img src="/logo.png?v=4m" alt=""></div>
   <h1>Entrar no painel</h1>
   <p>Este painel é restrito ao time. Use a conta Google que já tem acesso liberado.</p>
   {nota}
@@ -5405,7 +5408,7 @@ def pagina_painel(inicio, fim, base_inicio, base_fim, campanha, usuario, origem)
 
 <aside class="rail">
   <div class="rail-mark">
-    <img src="/logo.png" alt="" onerror="this.remove()">
+    <img src="/logo.png?v=4m" alt="" onerror="this.remove()">
   </div>
   <nav class="nav" aria-label="Seções do painel">
     <div class="nav-group-label">Painel</div>
