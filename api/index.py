@@ -650,6 +650,7 @@ _TG_BRANDS_PADRAO = OrderedDict([
         "DIEGO🚀 V10S37 - VSL 10 (Semana 37) - Apex Burn Pitch 43.59.mp4",
         "DIEGO🚀 V9S37 - VSL 9 (Semana 37) - Apex Burn - Pitch 36_00.mp4",
         "GOAT - BRAND 2 TG - v3s8 - Pitch 35_16.mp4",
+        "TG Inova [TOP1] ✅V3S4 - APEX BURN PITCH 48_01",
     ]),
     ("TG - B 3 : Mr Servicos - MEMO", [
         "TG DIEGO🚀 ⚽BRAND3 - V18S5 - VSL 18 (Semana 5) - Apex Neuro Elite - Pitch 31_05.mp4",
@@ -854,12 +855,24 @@ def carregar_tg(inicio, fim):
     for brand, lista in players_brand.items():
         ids = list(OrderedDict.fromkeys(p["id"] for p in lista))
         linhas = _somar_series([series.get(i, {}) for i in ids], dias)
+        # Cada VSL do brand, para ver como o tráfego se divide entre elas e
+        # quanto cada uma devolve em faturamento.
+        vsls = []
+        for i in ids:
+            dias_vsl = _somar_series([series.get(i, {})], dias)
+            vsls.append({
+                "id": i,
+                "name": unicos[i].get("name", ""),
+                "days": dias_vsl,
+                "totals": _totais(dias_vsl),
+            })
         brands.append({
             "name": brand,
             "videos": len(ids),
             "days": linhas,
             "totals": _totais(linhas),
             "prev_totals": _totais(_somar_series([series.get(i, {}) for i in ids], dias_base)),
+            "vsls": vsls,
         })
 
     return {
@@ -1248,6 +1261,12 @@ table.grid .cell-sub {
 }
 .share { display: block; height: 2px; border-radius: 2px; background: var(--brand); margin-top: 9px; opacity: .5; min-width: 2px; }
 table.grid.tg-grid { min-width: 820px; }
+table.grid.tg-grid td.tg-fatia { min-width: 128px; white-space: nowrap; font-size: 13px; }
+table.grid.tg-grid td.tg-fatia .share { opacity: .7; }
+table.grid.tg-grid tbody tr.tg-vazia td { opacity: .45; }
+table.grid.tg-grid .cell-title { max-width: 360px; }
+.tg-bar { display: block; height: 5px; border-radius: 3px; background: var(--panel-3); margin-top: 7px; overflow: hidden; }
+.tg-bar > span { display: block; height: 100%; border-radius: 3px; min-width: 2px; }
 table.grid.tg-grid tbody tr.tg-total td { background: var(--panel-2); font-weight: 600; cursor: default; }
 table.grid.tg-grid tbody tr[aria-selected="true"] td { background: var(--brand-wash); }
 table.grid.tg-grid .tg-day { color: var(--ink-3); font-size: 11.5px; margin-left: 6px; }
@@ -2088,6 +2107,31 @@ _VIEWS = """
       </div>
     </div>
     <div class="ticker" id="tgTicker"></div>
+  </div>
+
+  <div class="block">
+    <div class="block-head">
+      <div>
+        <h2 id="tgVslTitle">VSLs do brand</h2>
+        <p>Como o tráfego do brand se divide entre as VSLs e quanto cada uma devolve em faturamento.
+           A divisão é a real, medida pelas visitas: a vTurb não expõe a porcentagem configurada no teste.</p>
+      </div>
+    </div>
+    <div id="tgVslSummary"></div>
+    <div class="grid-wrap" id="tgVslWrap"><div class="scroll-x">
+      <table class="grid tg-grid">
+        <thead><tr>
+          <th>VSL</th>
+          <th title="Parte das visitas únicas do brand que foi para esta VSL no período">Tráfego no período</th>
+          <th class="r" id="tgVslUltimo" title="Parte das visitas do brand no último dia completo: é o mais perto da divisão configurada hoje">Último dia</th>
+          <th class="r">Visitas únicas</th>
+          <th class="r">Vendas</th>
+          <th title="Faturamento da VSL e quanto ele representa do faturamento do brand">Faturamento</th>
+          <th class="r" title="Faturamento / visitas únicas">Por visita</th>
+        </tr></thead>
+        <tbody id="tgVsls"></tbody>
+      </table>
+    </div></div>
   </div>
 
   <div class="block">
@@ -5074,6 +5118,7 @@ function renderTg() {
   const R = tgRecorte();
   $('#tgBrand').value = S.tgBrand;
   renderTgTicker(R);
+  renderTgVsls();
   renderTgNotes(R);
   drawTgChart(R);
   drawTgRpv(R);
@@ -5310,15 +5355,12 @@ function tgSpark(dias) {
 function renderTgBrands() {
   const T = S.tg;
   const brands = T.brands.slice().sort((a, b) => b.totals.revenue - a.totals.revenue);
-  const total = T.totals.revenue || 1;
   $('#tgBrands').innerHTML = brands.map(b => {
     const m = tgMetricas(b.totals), p = tgMetricas(b.prev_totals);
-    const fatia = (b.totals.revenue / total) * 100;
     return '<tr data-brand="' + esc(b.name) + '" aria-selected="' + String(b.name === S.tgBrand) + '">' +
       '<td><span class="cell-title">' + esc(b.name) + '</span>' +
-        '<span class="cell-sub">' + b.videos + ' VSL' + (b.videos === 1 ? '' : 's') + ' &middot; ' +
-        fPct(fatia, 1) + ' do faturamento</span>' +
-        '<span class="share" style="width:' + Math.min(100, fatia).toFixed(1) + '%"></span></td>' +
+        '<span class="cell-sub">' + b.videos + ' VSL' + (b.videos === 1 ? '' : 's') +
+        ' &middot; <span style="color:var(--brand-2)">ver divisão por VSL</span></span></td>' +
       '<td class="r">' + fInt(b.totals.unique_views) + '</td>' +
       '<td class="r">' + fInt(b.totals.conversions) + '</td>' +
       '<td class="r">' + fMoney(m.rpv) + '</td>' +
@@ -5326,8 +5368,69 @@ function renderTgBrands() {
       '<td class="r">' + tgChg(m.revenue, p.revenue) + '</td>' +
       '<td>' + tgSpark(b.days) + '</td></tr>';
   }).join('');
-  $('#tgBrandNote').textContent = 'Clique num brand para ver só ele nos gráficos. Brands que dividem a mesma VSL ' +
-    '(ex.: B4 e B8) mostram o mesmo número aqui, mas o total geral conta cada VSL uma vez só.';
+  $('#tgBrandNote').textContent = 'Clique num brand para ver como o tráfego dele se divide entre as VSLs. ' +
+    'Brands que dividem a mesma VSL (ex.: B4 e B8) mostram o mesmo número; o total geral conta cada VSL uma vez só.';
+}
+
+/** Último dia completo do período: hoje ainda está em andamento. */
+function tgUltimoDia(dias) {
+  const hoje = hojeISO();
+  for (let k = dias.length - 1; k >= 0; k--) if (dias[k].date !== hoje) return k;
+  return dias.length - 1;
+}
+
+function renderTgVsls() {
+  const T = S.tg;
+  const b = S.tgBrand && T.brands.find(x => x.name === S.tgBrand);
+  if (!b) {
+    $('#tgVslTitle').textContent = 'VSLs do brand';
+    $('#tgVslWrap').style.display = 'none';
+    $('#tgVslSummary').innerHTML = '<div class="blank"><b>Escolha um brand</b>' +
+      'Use o Recorte acima ou clique num brand na tabela "Por brand" para ver quanto do tráfego vai para cada VSL e quanto cada uma fatura.</div>';
+    return;
+  }
+  $('#tgVslTitle').textContent = 'VSLs do ' + b.name;
+  $('#tgVslWrap').style.display = '';
+
+  const k = tgUltimoDia(b.days);
+  const diaRef = b.days[k];
+  $('#tgVslUltimo').textContent = diaRef ? 'Em ' + brDate(diaRef.date).slice(0, 5) : 'Último dia';
+
+  const visitas = b.totals.unique_views || 0;
+  const fat = b.totals.revenue || 0;
+  const visitasDia = diaRef ? diaRef.unique_views : 0;
+  const linhas = b.vsls.map(v => ({
+    v,
+    trafego: visitas ? (v.totals.unique_views / visitas) * 100 : 0,
+    trafegoDia: visitasDia ? (((v.days[k] || {}).unique_views || 0) / visitasDia) * 100 : 0,
+    fatia: fat ? (v.totals.revenue / fat) * 100 : 0,
+    rpv: tgMetricas(v.totals).rpv
+  })).sort((x, y) => y.trafego - x.trafego || y.fatia - x.fatia);
+
+  const lider = linhas[0];
+  $('#tgVslSummary').innerHTML = lider && lider.v.totals.unique_views
+    ? '<div class="note sev-info" style="margin-bottom:12px"><p style="font-size:13.5px;color:var(--ink-1)">' +
+        '<b>' + esc(lider.v.name) + '</b> recebeu <b style="color:var(--cyan)">' + fPct(lider.trafego, 1) +
+        '</b> do tráfego do brand e trouxe <b style="color:var(--brand-2)">' + fMoney(lider.v.totals.revenue) +
+        '</b>, que é ' + fPct(lider.fatia, 1) + ' do faturamento do brand.</p></div>'
+    : '';
+
+  const barra = (pct, cor) => '<span class="tg-bar"><span style="width:' + Math.min(100, pct).toFixed(1) + '%;background:' + cor + '"></span></span>';
+  $('#tgVsls').innerHTML = linhas.map(l => {
+    const vazio = !l.v.totals.unique_views;
+    return '<tr' + (vazio ? ' class="tg-vazia"' : '') + ' title="' + esc(l.v.name) + '">' +
+      '<td><span class="cell-title">' + esc(l.v.name) + '</span></td>' +
+      '<td class="tg-fatia"><b class="num" style="color:var(--cyan)">' + fPct(l.trafego, 1) + '</b>' + barra(l.trafego, 'var(--cyan)') + '</td>' +
+      '<td class="r">' + fPct(l.trafegoDia, 1) + '</td>' +
+      '<td class="r">' + fInt(l.v.totals.unique_views) + '</td>' +
+      '<td class="r">' + fInt(l.v.totals.conversions) + '</td>' +
+      '<td class="tg-fatia"><b class="num" style="color:var(--brand-2)">' + fMoney(l.v.totals.revenue) + '</b>' +
+        ' <span style="color:var(--ink-3)">' + fPct(l.fatia, 1) + '</span>' + barra(l.fatia, 'var(--brand-2)') + '</td>' +
+      '<td class="r">' + fMoney(l.rpv) + '</td></tr>';
+  }).join('') +
+  '<tr class="tg-total"><td>Total do brand</td><td class="tg-fatia"><b class="num">100%</b></td><td class="r">100%</td>' +
+    '<td class="r">' + fInt(visitas) + '</td><td class="r">' + fInt(b.totals.conversions) + '</td>' +
+    '<td class="tg-fatia"><b class="num">' + fMoney(fat) + '</b></td><td class="r">' + fMoney(tgMetricas(b.totals).rpv) + '</td></tr>';
 }
 
 function exportTgCsv() {
@@ -5399,7 +5502,7 @@ function wire() {
     if (linhaTg) {
       S.tgBrand = S.tgBrand === linhaTg.dataset.brand ? '' : linhaTg.dataset.brand;
       renderTg();
-      $('#tgChart').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (S.tgBrand) $('#tgVslTitle').scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
     const abrir = ev.target.closest('[data-open]');

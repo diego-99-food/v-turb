@@ -1,0 +1,7 @@
+# Arquivos locais que não fazem parte do painel publicado.
+api/debug.py
+api/*.xlsx
+api/*.zip
+api/*.html
+__pycache__/
+*.pyc
