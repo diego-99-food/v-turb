@@ -912,6 +912,72 @@ def salvar_divisao(brand, pesos, usuario):
     return {"pesos": limpos, "meta": meta}
 
 
+# Lista de VSLs de cada brand editada pelo painel: {brand: [player_id, ...]}.
+# Brand sem entrada aqui usa o mapa padrão (TG_BRANDS).
+_CHAVE_VSLS = "tg:vsls"
+
+
+def ler_vsls_editadas():
+    if not (REDIS_URL and REDIS_TOKEN):
+        return {}
+    try:
+        bruto = _hash_para_dict(_redis("HGETALL", _CHAVE_VSLS))
+    except ErroArmazenamento as exc:
+        log.warning("listas de VSL: %s", exc)
+        return {}
+    saida = {}
+    for brand, valor in bruto.items():
+        try:
+            dados = json.loads(valor)
+            saida[brand] = [str(i) for i in dados.get("ids", [])]
+        except (ValueError, AttributeError):
+            continue
+    return saida
+
+
+def salvar_vsls_brand(brand, ids, usuario):
+    """Grava a lista completa de VSLs de um brand. Some com a divisão
+    configurada das VSLs que saíram, para não sobrar peso órfão."""
+    if brand not in TG_BRANDS:
+        raise ValueError("Brand desconhecido.")
+    existentes = {str(p["id"]) for p in listar_players()}
+    limpos = list(OrderedDict.fromkeys(str(i)[:64] for i in (ids or [])))
+    if len(limpos) > 60:
+        raise ValueError("VSLs demais num brand só.")
+    desconhecidos = [i for i in limpos if i not in existentes]
+    if desconhecidos:
+        raise ValueError("Alguma VSL não existe mais na vTurb. Recarregue a página.")
+
+    pesos = _hash_para_dict(_redis("HGETALL", _CHAVE_DIVISAO))
+    orfaos = [c for c in pesos if c.rpartition("|")[0] == brand and c.rpartition("|")[2] not in limpos]
+    if orfaos:
+        _redis("HDEL", _CHAVE_DIVISAO, *orfaos)
+
+    agora_brt = datetime.utcnow() - timedelta(hours=3)
+    meta = {"em": agora_brt.strftime("%Y-%m-%d %H:%M"), "por": usuario}
+    _redis("HSET", _CHAVE_VSLS, brand, json.dumps({"ids": limpos, "meta": meta}, ensure_ascii=False))
+    return {"ids": limpos, "meta": meta}
+
+
+def restaurar_vsls_brand(brand):
+    if brand not in TG_BRANDS:
+        raise ValueError("Brand desconhecido.")
+    _redis("HDEL", _CHAVE_VSLS, brand)
+    return {"ok": True}
+
+
+def buscar_players(termo, limite=40):
+    """Players cujo nome contém todos os pedaços digitados, mais novos primeiro."""
+    partes = [t for t in _nome_normalizado(termo).split(" ") if t]
+    if not partes:
+        return []
+    achados = [p for p in listar_players()
+               if all(t in _nome_normalizado(p.get("name")) for t in partes)]
+    achados.sort(key=lambda p: p.get("created_at") or "", reverse=True)
+    return [{"id": str(p["id"]), "name": p.get("name", ""), "created_at": (p.get("created_at") or "")[:10]}
+            for p in achados[:limite]]
+
+
 def carregar_tg(inicio, fim):
     """Tráfego e faturamento diários de todos os brands do TG somados, mais o
     mesmo recorte do período imediatamente anterior (mesma duração) para dar
@@ -924,14 +990,27 @@ def carregar_tg(inicio, fim):
     dias_base = [(b_ini + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(n_dias)]
 
     por_nome = defaultdict(list)
+    por_id = {}
     for p in listar_players():
         por_nome[_nome_normalizado(p.get("name"))].append(p)
+        por_id[str(p["id"])] = p
 
+    editadas = ler_vsls_editadas()
     nao_achados = []
     players_brand = OrderedDict()
     unicos = {}
     for brand, nomes in TG_BRANDS.items():
         lista = []
+        if brand in editadas:
+            for pid in editadas[brand]:
+                p = por_id.get(pid)
+                if not p:
+                    nao_achados.append({"brand": brand, "name": pid})
+                    continue
+                lista.append(p)
+                unicos[p["id"]] = p
+            players_brand[brand] = lista
+            continue
         for nome in nomes:
             achados = por_nome.get(_nome_normalizado(nome)) \
                 or por_nome.get(_nome_normalizado(re.sub(r"\.mp4.*$", "", nome, flags=re.I)))
@@ -983,6 +1062,7 @@ def carregar_tg(inicio, fim):
             "totals": _totais(linhas),
             "prev_totals": _totais(_somar_series([series.get(i, {}) for i in ids], dias_base)),
             "vsls": vsls,
+            "editado": brand in editadas,
         })
 
     return {
@@ -1384,6 +1464,16 @@ table.grid.tg-grid .cell-title { max-width: 360px; }
 .tg-pct:disabled { opacity: .5; }
 .tg-savebar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 12px; font-size: 13px; color: var(--ink-3); }
 .tg-savebar .tg-soma { font-family: var(--mono); font-weight: 600; }
+.tg-rm { background: none; border: 1px solid transparent; color: var(--ink-3); border-radius: var(--r-xs);
+  width: 26px; height: 26px; cursor: pointer; font-size: 16px; line-height: 1; }
+.tg-rm:hover { color: var(--neg); border-color: color-mix(in srgb, var(--neg) 40%, transparent); background: var(--neg-wash); }
+.tg-add { margin-top: 14px; padding: 16px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--panel); }
+.tg-add .field input { width: 100%; max-width: 520px; }
+.tg-add-list { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; max-height: 340px; overflow-y: auto; }
+.tg-add-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px;
+  border-radius: var(--r-xs); background: var(--panel-2); font-size: 13px; }
+.tg-add-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tg-add-item small { color: var(--ink-3); margin-left: 8px; }
 .tg-bar { display: block; height: 5px; border-radius: 3px; background: var(--panel-3); margin-top: 7px; overflow: hidden; }
 .tg-bar > span { display: block; height: 100%; border-radius: 3px; min-width: 2px; }
 table.grid.tg-grid tbody tr.tg-total td { background: var(--panel-2); font-weight: 600; cursor: default; }
@@ -2038,11 +2128,19 @@ _VIEWS = """
           <th class="r">Vendas</th>
           <th title="Faturamento da VSL e quanto ele representa do faturamento do brand">Faturamento</th>
           <th class="r" title="Faturamento / visitas únicas">Por visita</th>
+          <th style="width:36px"></th>
         </tr></thead>
         <tbody id="tgVsls"></tbody>
       </table>
     </div></div>
     <div class="tg-savebar" id="tgSaveBar"></div>
+    <div class="tg-add" id="tgAdd" hidden>
+      <div class="field">
+        <label for="tgAddQ">Buscar vídeo na vTurb</label>
+        <input type="text" id="tgAddQ" placeholder="Parte do nome, ex.: v10s30 ou B4TG" autocomplete="off">
+      </div>
+      <div id="tgAddList" class="tg-add-list"></div>
+    </div>
   </div>
 
   <div class="block">
@@ -5282,6 +5380,7 @@ function renderTgVsls() {
   const T = S.tg;
   const b = S.tgBrand && T.brands.find(x => x.name === S.tgBrand);
   if (!b) {
+    $('#tgAdd').hidden = true;
     $('#tgVslTitle').textContent = 'VSLs do brand';
     $('#tgVslWrap').style.display = 'none';
     $('#tgVslSummary').innerHTML = '<div class="blank"><b>Escolha um brand</b>' +
@@ -5289,6 +5388,7 @@ function renderTgVsls() {
     return;
   }
   $('#tgVslTitle').textContent = 'VSLs do ' + b.name;
+  if (S.tgAddBrand !== b.name) { $('#tgAdd').hidden = true; S.tgAddBrand = b.name; }
   $('#tgVslWrap').style.display = '';
 
   const k = tgUltimoDia(b.days);
@@ -5333,15 +5433,18 @@ function renderTgVsls() {
       '<td class="r">' + fInt(l.v.totals.conversions) + '</td>' +
       '<td class="tg-fatia"><b class="num" style="color:var(--brand-2)">' + fMoney(l.v.totals.revenue) + '</b>' +
         ' <span style="color:var(--ink-3)">' + fPct(l.fatia, 1) + '</span>' + barra(l.fatia, 'var(--brand-2)') + '</td>' +
-      '<td class="r">' + fMoney(l.rpv) + '</td></tr>';
+      '<td class="r">' + fMoney(l.rpv) + '</td>' +
+      '<td>' + (ativa ? '<button class="tg-rm" data-act="rm-vsl" data-pid="' + esc(l.v.id) + '" title="Tirar esta VSL do brand">&times;</button>' : '') + '</td></tr>';
   }).join('') +
   '<tr class="tg-total"><td>Total do brand</td><td class="r"><span class="num" id="tgSomaCel">—</span></td>' +
     '<td class="r">100%</td>' +
     '<td class="r">' + fInt(visitas) + '</td><td class="r">' + fInt(b.totals.conversions) + '</td>' +
-    '<td class="tg-fatia"><b class="num">' + fMoney(fat) + '</b></td><td class="r">' + fMoney(tgMetricas(b.totals).rpv) + '</td></tr>';
+    '<td class="tg-fatia"><b class="num">' + fMoney(fat) + '</b></td><td class="r">' + fMoney(tgMetricas(b.totals).rpv) + '</td><td></td></tr>';
 
   $('#tgSaveBar').innerHTML = ativa
     ? '<button class="btn btn-primary btn-sm" data-act="save-divisao">Salvar divisão</button>' +
+      '<button class="btn btn-sm" data-act="add-vsl-open">+ Adicionar VSL</button>' +
+      (b.editado ? '<button class="btn btn-ghost btn-sm" data-act="reset-vsls">Restaurar lista padrão</button>' : '') +
       '<span>Soma: <span class="tg-soma" id="tgSoma"></span></span>' +
       '<span>' + (div.meta ? 'Atualizado em ' + brDate(div.meta.em.slice(0, 10)) + ' ' + esc(div.meta.em.slice(11)) +
         (div.meta.por ? ' por ' + esc(div.meta.por) : '') : 'Ainda não preenchido para este brand.') + '</span>'
@@ -5356,6 +5459,73 @@ function tgAtualizarSoma() {
   const texto = preenchidos.length ? fPct(soma, 0) : '—';
   const cor = !preenchidos.length ? 'var(--ink-3)' : (Math.abs(soma - 100) < 0.5 ? 'var(--pos)' : 'var(--warn)');
   [$('#tgSoma'), $('#tgSomaCel')].forEach(el => { if (el) { el.textContent = texto; el.style.color = cor; } });
+}
+
+function tgBrandAtual() {
+  return S.tg && S.tgBrand ? S.tg.brands.find(x => x.name === S.tgBrand) : null;
+}
+
+async function tgPostVsls(corpo, mensagem) {
+  try {
+    const res = await fetch('/api/tg/vsls?route=tg-vsls', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(corpo)
+    });
+    if (res.status === 401) { location.href = '/'; return; }
+    await lerJson(res, '/api/tg/vsls');
+    toast(mensagem);
+    $('#tgAdd').hidden = true;
+    S.tgKey = null;           // força recarregar com a lista nova
+    await loadTg();
+    $('#tgVslTitle').scrollIntoView({ block: 'start' });
+    window.scrollBy(0, -170);
+  } catch (err) {
+    console.error(err);
+    toast(err.message || 'Não deu para salvar.', 'err');
+  }
+}
+
+function tgRemoverVsl(pid) {
+  const b = tgBrandAtual();
+  if (!b) return;
+  const v = b.vsls.find(x => String(x.id) === String(pid));
+  if (!confirm('Tirar "' + (v ? v.name : pid) + '" do ' + b.name + '?')) return;
+  tgPostVsls({ brand: b.name, ids: b.vsls.map(x => String(x.id)).filter(i => i !== String(pid)) }, 'VSL removida do brand.');
+}
+
+function tgAdicionarVsl(pid) {
+  const b = tgBrandAtual();
+  if (!b) return;
+  tgPostVsls({ brand: b.name, ids: b.vsls.map(x => String(x.id)).concat(String(pid)) }, 'VSL adicionada ao brand.');
+}
+
+function tgRestaurarVsls() {
+  const b = tgBrandAtual();
+  if (!b || !confirm('Voltar o ' + b.name + ' para a lista padrão de VSLs?')) return;
+  tgPostVsls({ brand: b.name, restaurar: true }, 'Lista padrão restaurada.');
+}
+
+async function tgBuscarPlayers() {
+  const termo = $('#tgAddQ').value.trim();
+  const box = $('#tgAddList');
+  if (termo.length < 2) { box.innerHTML = '<span style="color:var(--ink-3);font-size:13px">Digite pelo menos 2 letras.</span>'; return; }
+  try {
+    const res = await fetch('/api/tg/players?' + new URLSearchParams({ q: termo, route: 'tg-players' }), { credentials: 'include' });
+    if (res.status === 401) { location.href = '/'; return; }
+    const data = await lerJson(res, '/api/tg/players');
+    if ($('#tgAddQ').value.trim() !== termo) return;   // o usuário já digitou outra coisa
+    const b = tgBrandAtual();
+    const ja = new Set(b ? b.vsls.map(x => String(x.id)) : []);
+    box.innerHTML = data.players.length ? data.players.map(p =>
+      '<div class="tg-add-item"><span title="' + esc(p.name) + '">' + esc(p.name) +
+        '<small>criado em ' + brDate(p.created_at) + '</small></span>' +
+      (ja.has(p.id) ? '<small>já está no brand</small>'
+        : '<button class="btn btn-sm" data-act="add-vsl" data-pid="' + esc(p.id) + '">Adicionar</button>') +
+      '</div>').join('') : '<span style="color:var(--ink-3);font-size:13px">Nenhum vídeo com esse nome.</span>';
+  } catch (err) {
+    box.innerHTML = '<span style="color:var(--neg);font-size:13px">' + esc(err.message) + '</span>';
+  }
 }
 
 async function salvarDivisao() {
@@ -5429,6 +5599,7 @@ function wire() {
   $('#search').addEventListener('input', debounce(filterCohorts, 160));
   $('#tgBrand').addEventListener('change', ev => { S.tgBrand = ev.target.value; renderTg(); });
   $('#tgVsls').addEventListener('input', ev => { if (ev.target.classList.contains('tg-pct')) tgAtualizarSoma(); });
+  $('#tgAddQ').addEventListener('input', debounce(tgBuscarPlayers, 250));
 
   document.addEventListener('click', ev => {
     const acao = ev.target.closest('[data-act]');
@@ -5438,6 +5609,13 @@ function wire() {
       if (a === 'close-sheet') closeSheet();
       if (a === 'export-tg') exportTgCsv();
       if (a === 'save-divisao') salvarDivisao();
+      if (a === 'rm-vsl') tgRemoverVsl(acao.dataset.pid);
+      if (a === 'add-vsl') tgAdicionarVsl(acao.dataset.pid);
+      if (a === 'reset-vsls') tgRestaurarVsls();
+      if (a === 'add-vsl-open') {
+        $('#tgAdd').hidden = !$('#tgAdd').hidden;
+        if (!$('#tgAdd').hidden) { $('#tgAddQ').value = ''; $('#tgAddList').innerHTML = ''; $('#tgAddQ').focus(); }
+      }
       if (a === 'theme') toggleTheme();
       if (a === 'palette') openPalette();
       if (a === 'rail') document.body.classList.toggle('rail-open');
@@ -5734,17 +5912,22 @@ class handler(BaseHTTPRequestHandler):
         """Só a gravação da divisão de tráfego configurada usa POST."""
         rota = urlparse(self.path).path.rstrip("/").lower()
         params = parse_qs(urlparse(self.path).query)
-        if not (rota.endswith("/api/tg/divisao") or params.get("route", [""])[0] == "tg-divisao"):
+        alvo = params.get("route", [""])[0]
+        if rota.endswith("/api/tg/divisao") or alvo == "tg-divisao":
+            acao = "divisao"
+        elif rota.endswith("/api/tg/vsls") or alvo == "tg-vsls":
+            acao = "vsls"
+        else:
             return self._json(404, {"error": "Rota não encontrada."})
         try:
-            return self._api_tg_divisao()
+            return self._api_tg_post(acao)
         except BrokenPipeError:
             return
         except Exception as exc:
             log.exception("erro ao salvar a divisão")
             return self._json(500, {"error": f"Erro interno ({type(exc).__name__})."})
 
-    def _api_tg_divisao(self):
+    def _api_tg_post(self, acao):
         sessao = self._sessao_ou_401()
         if not sessao:
             return
@@ -5764,12 +5947,19 @@ class handler(BaseHTTPRequestHandler):
         except ValueError:
             return self._json(400, {"error": "JSON inválido."})
 
+        brand = str(corpo.get("brand", ""))[:200]
+        usuario = sessao.get("name") or sessao.get("email") or ""
         try:
-            salvo = salvar_divisao(
-                str(corpo.get("brand", ""))[:200],
-                corpo.get("pesos") if isinstance(corpo.get("pesos"), dict) else {},
-                sessao.get("name") or sessao.get("email") or "",
-            )
+            if acao == "divisao":
+                salvo = salvar_divisao(
+                    brand, corpo.get("pesos") if isinstance(corpo.get("pesos"), dict) else {}, usuario)
+            elif corpo.get("restaurar"):
+                salvo = restaurar_vsls_brand(brand)
+            else:
+                ids = corpo.get("ids") if isinstance(corpo.get("ids"), list) else []
+                salvo = salvar_vsls_brand(brand, ids, usuario)
+        except ErroVTurb as exc:
+            return self._json(502, {"error": str(exc)})
         except ValueError as exc:
             return self._json(400, {"error": str(exc)})
         except ErroArmazenamento as exc:
@@ -5813,6 +6003,9 @@ class handler(BaseHTTPRequestHandler):
 
             if quer_retencao or rota.endswith("/api/retention") or rota.endswith("/retention"):
                 return self._api_retencao(params, host)
+
+            if params.get("route", [""])[0] == "tg-players" or rota.endswith("/api/tg/players"):
+                return self._api_tg_players(params)
 
             if quer_tg or rota.endswith("/api/tg"):
                 return self._api_tg(params, host)
@@ -5955,6 +6148,16 @@ class handler(BaseHTTPRequestHandler):
 
         self._json(200, {"videos": videos, "start": inicio, "end": fim},
                    [montar_cookie(COOKIE_NAME, renovar_sessao(sessao), host)])
+
+    def _api_tg_players(self, params):
+        """Busca de vídeos da vTurb para adicionar a um brand."""
+        if not self._sessao_ou_401():
+            return
+        termo = (params.get("q", [""])[0] or "")[:80]
+        try:
+            return self._json(200, {"players": buscar_players(termo)})
+        except ErroVTurb as exc:
+            return self._json(502, {"error": str(exc)})
 
     def _api_tg(self, params, host):
         sessao = self._sessao_ou_401()
