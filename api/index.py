@@ -1883,215 +1883,6 @@ _VIEWS = """
   </div>
 </section>
 
-<!-- ============ RETENÇÃO ============ -->
-<section id="v-retention" class="view">
-  <div class="block" style="padding-top:28px">
-    <div class="block-head">
-      <div>
-        <h2>Curva de retenção</h2>
-        <p>Quanto do público continua assistindo a cada instante. A linha tracejada marca o momento da oferta, lido do nome do criativo.</p>
-      </div>
-      <div class="spacer"></div>
-      <div class="field">
-        <label for="retentionFilter">Grupo de criativos</label>
-        <input type="text" id="retentionFilter" placeholder="Ex.: Apex Boost">
-      </div>
-      <button class="btn btn-primary btn-sm" data-act="load-retention">Carregar curvas</button>
-    </div>
-    <div class="panel panel-pad">
-      <div id="retentionLegend" class="legend"></div>
-      <div id="retentionChart"></div>
-    </div>
-  </div>
-
-  <div class="block">
-    <div class="block-head">
-      <div>
-        <h2>Maiores quedas</h2>
-        <p>Trechos em que a curva cai mais rápido. É onde vale reescrever ou cortar.</p>
-      </div>
-    </div>
-    <div id="dropoffs"></div>
-  </div>
-
-  <div class="block">
-    <div class="block-head">
-      <div><h2>Criativos do grupo</h2></div>
-    </div>
-    <div id="retentionList"></div>
-  </div>
-</section>
-
-<!-- ============ TESTE A/B ============ -->
-<section id="v-ab" class="view">
-  <div class="block" style="padding-top:28px">
-    <div class="block-head">
-      <div>
-        <h2>Comparar dois criativos</h2>
-        <p>O painel calcula se a diferença observada aguenta ser chamada de resultado ou se ainda é ruído de amostra.</p>
-      </div>
-    </div>
-    <div class="panel panel-pad" style="margin-bottom:20px">
-      <div class="ab-head">
-        <div class="field">
-          <label for="abA">Controle</label>
-          <select id="abA"></select>
-        </div>
-        <div style="padding-bottom:9px;color:var(--ink-3);font-size:12.5px">contra</div>
-        <div class="field">
-          <label for="abB">Variação</label>
-          <select id="abB"></select>
-        </div>
-        <button class="btn btn-primary" data-act="run-ab" style="margin-bottom:1px">Comparar</button>
-      </div>
-    </div>
-    <div id="abResult"></div>
-  </div>
-</section>
-
-<!-- ============ EM TESTE ============ -->
-<section id="v-tracking" class="view">
-  <div class="block" style="padding-top:28px">
-    <div class="block-head">
-      <div>
-        <h2>Acompanhamento das VSLs em teste</h2>
-        <p>Toda variação com tráfego na janela escolhida lá em cima entra aqui e é lida contra um controle. As três métricas do acompanhamento são conversão, receita por visita e retenção até a oferta.</p>
-      </div>
-    </div>
-    <div class="panel panel-pad" style="margin-bottom:20px">
-      <div class="test-bar">
-        <div class="field">
-          <label for="testControl">Controle</label>
-          <select id="testControl"></select>
-        </div>
-        <button class="btn btn-primary" data-act="run-teste" style="margin-bottom:1px">Reler testes</button>
-        <div class="ref" id="testRef"></div>
-      </div>
-    </div>
-    <div class="focus-grid" id="trackFocus"></div>
-  </div>
-
-  <div class="block">
-    <div class="block-head">
-      <div>
-        <h2>Placar das variações</h2>
-        <p>O impacto é a diferença de receita por visita aplicada ao tráfego que a variação recebeu: quanto ela rendeu a mais, ou a menos, do que o controle renderia no lugar dela.</p>
-      </div>
-      <div class="spacer"></div>
-      <button class="btn btn-sm" data-act="export-teste">Baixar CSV</button>
-    </div>
-    <div class="grid-wrap"><div class="scroll-x"><table class="grid" id="trackTable"></table></div></div>
-  </div>
-
-  <div class="block">
-    <div class="block-head">
-      <div>
-        <h2>De onde vem a diferença de RPV</h2>
-        <p>Receita por visita é play rate vezes conversão vezes ticket. Separar os três fatores mostra se o ganho veio de audiência, de oferta ou só de preço.</p>
-      </div>
-    </div>
-    <div class="wf" id="trackDecomp"></div>
-  </div>
-
-  <div class="block">
-    <div class="block-head">
-      <div>
-        <h2>Leituras do acompanhamento</h2>
-        <p>Geradas a partir dos números do período, não de regras fixas.</p>
-      </div>
-    </div>
-    <div class="notes" id="trackNotes"></div>
-  </div>
-</section>
-
-<!-- ============ MATURIDADE ============ -->
-<section id="v-maturity" class="view">
-  <div class="block" style="padding-top:28px">
-    <div class="block-head">
-      <div>
-        <h2>Quais testes já podem ser decididos</h2>
-        <p>Cada teste é comparado com a amostra que o efeito observado exigiria a 95% de confiança e 80% de poder. Volume suficiente não é um número redondo: depende do tamanho da diferença que se quer enxergar.</p>
-      </div>
-    </div>
-    <div class="bucket-grid" id="matBuckets"></div>
-  </div>
-
-  <div class="block">
-    <div class="block-head">
-      <div>
-        <h2>Amostra, ritmo e prazo</h2>
-        <p>A amostra efetiva é a média harmônica dos dois braços: um lado com pouco tráfego limita o teste inteiro, por maior que seja o outro.</p>
-      </div>
-    </div>
-    <div class="grid-wrap"><div class="scroll-x"><table class="grid" id="matTable"></table></div></div>
-  </div>
-
-  <div class="block">
-    <div class="block-head">
-      <div>
-        <h2>O que a amostra de hoje consegue enxergar</h2>
-        <p>A faixa cinza é a zona cega: diferenças dentro dela não se separam do ruído com a amostra atual. O ponto é o efeito observado na conversão.</p>
-      </div>
-    </div>
-    <div class="panel panel-pad" id="matBlind"></div>
-  </div>
-
-  <div class="block">
-    <div class="block-head">
-      <div>
-        <h2>Próximos passos</h2>
-        <p>O que fazer com cada teste e qual variação ainda vale explorar.</p>
-      </div>
-    </div>
-    <div class="notes" id="matNotes"></div>
-  </div>
-</section>
-
-<!-- ============ LEITURA DOS TESTES ============ -->
-<section id="v-readout" class="view">
-  <div class="block" style="padding-top:28px">
-    <div class="block-head">
-      <div>
-        <h2>Régua de decisão</h2>
-        <p>Critérios fixos aplicados a todos os testes. Deixar a régua visível evita que cada leitura use um limiar diferente conforme o resultado agrade ou não.</p>
-      </div>
-    </div>
-    <div class="rule-grid" id="readRule"></div>
-  </div>
-
-  <div class="block">
-    <div class="block-head">
-      <div>
-        <h2>Placar automático</h2>
-        <p>Todas as variações contra o controle nas três métricas, sem precisar escolher par a par. Verde passou a régua a favor, vermelho passou contra, cinza ainda não separa do ruído.</p>
-      </div>
-    </div>
-    <div class="grid-wrap"><div class="scroll-x"><table class="grid" id="readBoard"></table></div></div>
-  </div>
-
-  <div class="block">
-    <div class="block-head">
-      <div>
-        <h2>Fila de decisão</h2>
-        <p>Ordenada por urgência: o que já pode ser decidido vem antes do que ainda precisa rodar.</p>
-      </div>
-    </div>
-    <div class="queue" id="readQueue"></div>
-  </div>
-
-  <div class="block">
-    <div class="block-head">
-      <div>
-        <h2>Resumo para reportar</h2>
-        <p>Mesma leitura em texto puro, pronta para colar em reunião, e-mail ou documento de teste.</p>
-      </div>
-      <div class="spacer"></div>
-      <button class="btn btn-sm" data-act="copy-resumo">Copiar resumo</button>
-    </div>
-    <div class="summary-box" id="readSummary"></div>
-  </div>
-</section>
-
 <!-- ============ TG BRANDS ============ -->
 <section id="v-tg" class="view">
   <div class="block" style="padding-top:28px">
@@ -2926,10 +2717,6 @@ function renderAll() {
   renderRanking();
   drawMatrix();
   renderCohorts();
-  fillAbSelects();
-  renderAb();
-  fillTesteControls();
-  renderTestes();
 }
 
 /* ---------- Faixa de números ---------- */
@@ -3810,11 +3597,6 @@ function renderAb() {
 const PALETTE_ACTIONS = [
   { kind: 'Seção', label: 'Visão geral', run: () => goView('v-overview') },
   { kind: 'Seção', label: 'Criativos', run: () => goView('v-creatives') },
-  { kind: 'Seção', label: 'Retenção', run: () => goView('v-retention') },
-  { kind: 'Seção', label: 'Teste A/B', run: () => goView('v-ab') },
-  { kind: 'Seção', label: 'Em teste', run: () => goView('v-tracking') },
-  { kind: 'Seção', label: 'Maturidade dos testes', run: () => goView('v-maturity') },
-  { kind: 'Seção', label: 'Leitura dos testes', run: () => goView('v-readout') },
   { kind: 'Seção', label: 'TG Brands: tráfego x faturamento', run: () => goView('v-tg') },
   { kind: 'Ação', label: 'Copiar resumo dos testes', run: copiarResumo },
   { kind: 'Ação', label: 'Baixar CSV dos testes', run: exportTesteCsv },
@@ -5009,8 +4791,6 @@ function restorePrefs() {
       const c = localStorage.getItem('vsl.campaign');
       if (c) $('#fCampaign').value = c;
     }
-    const g = localStorage.getItem('vsl.group');
-    if (g) $('#retentionFilter').value = g;
     const auto = localStorage.getItem('vsl.auto');
     if (auto !== null) $('#fAuto').checked = auto === '1';
     const tc = localStorage.getItem('vsl.teste.control');
@@ -5022,7 +4802,6 @@ function restorePrefs() {
 function savePrefs() {
   try {
     localStorage.setItem('vsl.campaign', $('#fCampaign').value.trim());
-    localStorage.setItem('vsl.group', $('#retentionFilter').value.trim());
     localStorage.setItem('vsl.auto', $('#fAuto').checked ? '1' : '0');
   } catch (e) {}
 }
@@ -5475,10 +5254,6 @@ function wire() {
   });
 
   $('#search').addEventListener('input', debounce(filterCohorts, 160));
-  $('#retentionFilter').addEventListener('change', savePrefs);
-  $('#abA').addEventListener('change', renderAb);
-  $('#abB').addEventListener('change', renderAb);
-  $('#testControl').addEventListener('change', aplicarFiltrosTeste);
   $('#tgBrand').addEventListener('change', ev => { S.tgBrand = ev.target.value; renderTg(); });
 
   document.addEventListener('click', ev => {
@@ -5487,11 +5262,6 @@ function wire() {
       const a = acao.dataset.act;
       if (a === 'export-csv') exportCsv();
       if (a === 'close-sheet') closeSheet();
-      if (a === 'load-retention') { savePrefs(); loadRetention(); }
-      if (a === 'run-ab') renderAb();
-      if (a === 'run-teste') aplicarFiltrosTeste();
-      if (a === 'export-teste') exportTesteCsv();
-      if (a === 'copy-resumo') copiarResumo();
       if (a === 'export-tg') exportTgCsv();
       if (a === 'theme') toggleTheme();
       if (a === 'palette') openPalette();
@@ -5538,8 +5308,7 @@ function wire() {
     }
     if (digitando) return;
 
-    const atalhos = { '1': 'v-overview', '2': 'v-creatives', '3': 'v-retention', '4': 'v-ab',
-                      '5': 'v-tracking', '6': 'v-maturity', '7': 'v-readout', '8': 'v-tg' };
+    const atalhos = { '1': 'v-overview', '2': 'v-creatives', '3': 'v-tg' };
     if (atalhos[ev.key]) { goView(atalhos[ev.key]); return; }
     if (ev.key === '/') { ev.preventDefault(); openPalette(); }
     if (ev.key.toLowerCase() === 't') toggleTheme();
@@ -5608,15 +5377,7 @@ def pagina_painel(inicio, fim, base_inicio, base_fim, campanha, usuario, origem)
     nav = "".join([
         _nav_link("overview", "Visão geral", "1", True),
         _nav_link("creatives", "Criativos", "2"),
-        _nav_link("retention", "Retenção", "3"),
-        _nav_link("ab", "Teste A/B", "4"),
-        _nav_link("tg", "TG Brands", "8"),
-    ])
-
-    nav_testes = "".join([
-        _nav_link("tracking", "Em teste", "5"),
-        _nav_link("maturity", "Maturidade", "6"),
-        _nav_link("readout", "Leitura", "7"),
+        _nav_link("tg", "TG Brands", "3"),
     ])
 
     presets = "".join(
@@ -5649,8 +5410,6 @@ def pagina_painel(inicio, fim, base_inicio, base_fim, campanha, usuario, origem)
   <nav class="nav" aria-label="Seções do painel">
     <div class="nav-group-label">Painel</div>
     {nav}
-    <div class="nav-group-label" style="margin-top:14px">Testes</div>
-    {nav_testes}
   </nav>
   <div class="rail-foot">
     <button class="btn btn-ghost btn-sm" data-act="palette" style="justify-content:space-between">
